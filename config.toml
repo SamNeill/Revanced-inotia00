@@ -1,9 +1,9 @@
 enable-magisk-update = true # set this to false if you do not want to receive updates for the module in magisk app
 parallel-jobs = 1
-patches-source = "anddea/revanced-patches" # Using pre-release patches
-patches-version = "dev" # Use 'dev' for pre-release patches
-# patches-source = "inotia00/revanced-patches" # Using ReVanced Extended patches
-# patches-version = "latest" # Use 'latest' for stable releases
+# patches-source = "anddea/revanced-patches" # Using pre-release patches
+# patches-version = "dev" # Use 'dev' for pre-release patches
+patches-source = "inotia00/revanced-patches" # Using ReVanced Extended patches
+patches-version = "latest" # Use 'latest' for stable releases
 
 # add 'enabled = false' for not patching a specific app or remove it from the config
 # see https://github.com/j-hc/revanced-magisk-module/blob/main/CONFIG.md for more detailed explanations
@@ -33,3 +33,10 @@ version = "latest"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 # archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
+
+[Music]
+build-mode = "both"
+arch = "both"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
+uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
+# archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
