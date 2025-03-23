@@ -1,0 +1,35 @@
+enable-magisk-update = true # set this to false if you do not want to receive updates for the module in magisk app
+parallel-jobs = 1
+patches-source = "anddea/revanced-patches" # Using pre-release patches
+patches-version = "dev" # Use 'dev' for pre-release patches
+# patches-source = "inotia00/revanced-patches" # Using ReVanced Extended patches
+# patches-version = "latest" # Use 'latest' for stable releases
+
+# add 'enabled = false' for not patching a specific app or remove it from the config
+# see https://github.com/j-hc/revanced-magisk-module/blob/main/CONFIG.md for more detailed explanations
+
+# you can use rvmm-config-gen to generate a config
+
+[YouTube]
+app-name = "youtube"
+module-prop-name = "youtube-magisk"
+build-mode = "both"
+excluded-patches = ""
+included-patches = ""
+version = "latest"
+# version = "20.10.40"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
+uptodown-dlurl = "https://youtube.en.uptodown.com/android"
+# archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
+
+[Monet]
+app-name = "youtube-monet"
+module-prop-name = "youtube-magisk-monet"
+build-mode = "both"
+excluded-patches = "'Theme'"
+included-patches = ""
+version = "latest"
+# version = "20.10.40"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
+uptodown-dlurl = "https://youtube.en.uptodown.com/android"
+# archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
