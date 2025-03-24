@@ -1,0 +1,198 @@
+image: ubuntu:latest
+
+variables:
+  GIT_STRATEGY: clone
+  GIT_SUBMODULE_STRATEGY: recursive
+  # Add cache for build artifacts
+  CACHE_COMPRESSION_LEVEL: "fastest"
+
+stages:
+  - check
+  - setup
+  - build
+  - release
+  - update
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .gradle/
+    - build/
+    - bin/
+    - temp/
+
+check:
+  stage: check
+  script:
+    - |
+      # Check if we should build
+      if ! git checkout origin/update build.md; then
+        echo "first time building!"
+        echo "SHOULD_BUILD=1" >> $CI_COMMIT_MESSAGE
+      else
+        UPDATE_CFG=$(./build.sh config.toml --config-update)
+        if [ "$UPDATE_CFG" ]; then
+          echo "'$UPDATE_CFG'"
+          echo "SHOULD_BUILD=1" >> $CI_COMMIT_MESSAGE
+        else
+          echo "SHOULD_BUILD=0" >> $CI_COMMIT_MESSAGE
+        fi
+      fi
+  artifacts:
+    reports:
+      dotenv: $CI_COMMIT_MESSAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+setup:
+  stage: setup
+  before_script:
+    - apt-get update && apt-get install -y openjdk-17-jdk git curl wget unzip openssl jq
+    - java -version
+    # Create necessary directories
+    - mkdir -p bin temp build
+    # Make scripts executable
+    - chmod +x build.sh
+    - chmod +x utils.sh
+    - chmod +x build-termux.sh
+  artifacts:
+    paths:
+      - bin/
+    expire_in: 1 week
+  rules:
+    - if: $SHOULD_BUILD == "1"
+
+build:
+  stage: build
+  script:
+    - |
+      if [ -f "config.json" ]; then
+        ./build.sh config.json
+      else
+        ./build.sh config.toml
+      fi
+  artifacts:
+    paths:
+      - build/
+      - build.md
+    expire_in: 1 week
+  rules:
+    - if: $SHOULD_BUILD == "1"
+
+release:
+  stage: release
+  script:
+    - |
+      # Get next version code
+      TAG=$(git tag --sort=-v:refname | head -n1)
+      if [ -z "$TAG" ]; then TAG=0; fi
+      NEXT_VER_CODE=$((TAG + 1))
+      
+      # Create release
+      git tag $NEXT_VER_CODE
+      git push origin $NEXT_VER_CODE
+      
+      # Create release using GitLab API
+      RELEASE_RESPONSE=$(curl --request POST \
+        --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+        --header "Content-Type: application/json" \
+        --data "{
+          \"name\": \"Release $NEXT_VER_CODE\",
+          \"tag_name\": \"$NEXT_VER_CODE\",
+          \"description\": \"$(cat build.md)\",
+          \"ref\": \"$CI_COMMIT_SHA\"
+        }" \
+        "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/releases")
+      
+      # Upload artifacts to release
+      for file in build/*; do
+        if [ -f "$file" ]; then
+          curl --request POST \
+            --header "PRIVATE-TOKEN: $CI_JOB_TOKEN" \
+            --form "file=@$file" \
+            "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/releases/$NEXT_VER_CODE/assets/links"
+        fi
+      done
+  rules:
+    - if: $SHOULD_BUILD == "1"
+      when: on_success
+
+update:
+  stage: update
+  script:
+    - |
+      # Update config and changelog
+      git checkout -f update || git switch --discard-changes --orphan update
+      cp -f build/build.md build.md
+      
+      # Generate update JSON files
+      cd build
+      for OUTPUT in *magisk*.zip; do
+        [ "$OUTPUT" = "*magisk*.zip" ] && continue
+        ZIP_S=$(unzip -p "$OUTPUT" module.prop)
+        if ! UPDATE_JSON=$(echo "$ZIP_S" | grep updateJson); then continue; fi
+        UPDATE_JSON="${UPDATE_JSON##*/}"
+        VER=$(echo "$ZIP_S" | grep version=)
+        VER="${VER##*=}"
+        DLURL="$CI_PROJECT_URL/-/releases/$NEXT_VER_CODE/downloads/${OUTPUT}"
+        echo "{
+          \"version\": \"$VER\",
+          \"versionCode\": $NEXT_VER_CODE,
+          \"zipUrl\": \"$DLURL\",
+          \"changelog\": \"$CI_PROJECT_URL/-/raw/update/build.md\"
+        }" > "../$UPDATE_JSON"
+      done
+      cd ..
+      
+      # Commit changes
+      git add build.md *-update.json
+      git commit -m "Bump version $NEXT_VER_CODE"
+      git push origin update
+  rules:
+    - if: $SHOULD_BUILD == "1"
+      when: on_success
+
+# Optional: Telegram notification
+notify_telegram:
+  stage: .post
+  script:
+    - |
+      if [ -n "$TG_TOKEN" ]; then
+        cd build
+        TG_CHAT="@rvc_magisk"
+        NL=$'\n'
+        APKS=""
+        MODULES=""
+        for OUTPUT in *; do
+          DL_URL="$CI_PROJECT_URL/-/releases/$NEXT_VER_CODE/downloads/${OUTPUT}"
+          if [[ $OUTPUT = *.apk ]]; then
+            APKS+="${NL}📦[${OUTPUT}](${DL_URL})"
+          elif [[ $OUTPUT = *.zip ]]; then
+            MODULES+="${NL}📦[${OUTPUT}](${DL_URL})"
+          fi
+        done
+        MODULES=${MODULES#"$NL"}
+        APKS=${APKS#"$NL"}
+        
+        BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
+        MSG="*New build!*
+        
+        ${BODY}
+        
+        *▼ Download Links:*
+        Modules:
+        ${MODULES}
+        
+        APKs:
+        ${APKS}
+        "
+        curl -X POST --data-urlencode "parse_mode=Markdown" \
+          --data-urlencode "disable_web_page_preview=true" \
+          --data-urlencode "text=${MSG}" \
+          --data-urlencode "chat_id=${TG_CHAT}" \
+          "https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+      fi
+  rules:
+    - if: $SHOULD_BUILD == "1"
+      when: on_success

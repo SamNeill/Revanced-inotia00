@@ -6,7 +6,16 @@ TEMP_DIR="temp"
 BIN_DIR="bin"
 BUILD_DIR="build"
 
-if [ "${GITHUB_TOKEN-}" ]; then GH_HEADER="Authorization: token ${GITHUB_TOKEN}"; else GH_HEADER=; fi
+# Support both GitHub and GitLab environments
+if [ "${GITHUB_TOKEN-}" ]; then 
+	GH_HEADER="Authorization: token ${GITHUB_TOKEN}"
+elif [ "${CI_JOB_TOKEN-}" ]; then
+	GH_HEADER="PRIVATE-TOKEN: ${CI_JOB_TOKEN}"
+else 
+	GH_HEADER=; 
+fi
+
+# Use GitLab CI variables if available, otherwise use GitHub variables
 NEXT_VER_CODE=${NEXT_VER_CODE:-$(date +'%Y%m%d')}
 OS=$(uname -o)
 
@@ -207,11 +216,25 @@ _req() {
 	fi
 }
 req() { _req "$1" "$2" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:108.0) Gecko/20100101 Firefox/108.0"; }
-gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
+gh_req() { 
+	if [ "${CI_JOB_TOKEN-}" ]; then
+		# GitLab API request
+		_req "$1" "$2" -H "$GH_HEADER" -H "Accept: application/json"
+	else
+		# GitHub API request
+		_req "$1" "$2" -H "$GH_HEADER"
+	fi
+}
 gh_dl() {
 	if [ ! -f "$1" ]; then
 		pr "Getting '$1' from '$2'"
-		_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream"
+		if [ "${CI_JOB_TOKEN-}" ]; then
+			# GitLab download
+			_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream"
+		else
+			# GitHub download
+			_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream"
+		fi
 	fi
 }
 
