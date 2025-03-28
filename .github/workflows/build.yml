@@ -25,15 +25,6 @@ jobs:
           fetch-depth: 0
           submodules: true
 
-      - name: Make scripts executable
-        run: |
-          chmod +x build.sh
-          chmod +x build-termux.sh
-          chmod +x utils.sh
-          chmod +x revanced-magisk/customize.sh
-          chmod +x revanced-magisk/service.sh
-          chmod +x revanced-magisk/uninstall.sh
-
       - name: Update config
         if: ${{ inputs.from_ci }}
         run: |
